@@ -127,7 +127,10 @@ def generate_with_openai_dalle(
     """Generate or reimagine image via OpenAI DALL-E 3 API."""
     key = api_key or os.getenv("OPENAI_API_KEY") or OPENAI_API_KEY
     if not key:
-        raise ValueError("OpenAI API key missing")
+        raise ValueError(
+            "OpenAI API Key is required for DALL-E image generation. "
+            "Please configure OPENAI_API_KEY in .env or the Streamlit sidebar."
+        )
 
     headers = {
         "Content-Type": "application/json",
@@ -141,8 +144,19 @@ def generate_with_openai_dalle(
         "response_format": "b64_json"
     }
 
-    resp = requests.post("https://api.openai.com/v1/images/generations", headers=headers, json=payload, timeout=90)
-    resp.raise_for_status()
+    try:
+        resp = requests.post("https://api.openai.com/v1/images/generations", headers=headers, json=payload, timeout=90)
+        resp.raise_for_status()
+    except requests.exceptions.HTTPError as e:
+        code = resp.status_code if resp is not None else "unknown"
+        if code == 401:
+            raise RuntimeError("OpenAI authentication failed (401 Unauthorized). Please check your API key.") from e
+        elif code == 429:
+            raise RuntimeError("OpenAI DALL-E quota or rate limit exceeded (429). Please verify account billing and limits.") from e
+        raise RuntimeError(f"OpenAI DALL-E API request failed ({code}): {e}") from e
+    except requests.exceptions.RequestException as e:
+        raise RuntimeError(f"Failed to connect to OpenAI DALL-E endpoint: {e}") from e
+
     b64_data = resp.json()["data"][0]["b64_json"]
     return Image.open(BytesIO(base64.b64decode(b64_data)))
 

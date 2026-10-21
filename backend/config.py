@@ -2,9 +2,6 @@ import os
 from pathlib import Path
 from dotenv import load_dotenv
 
-# Load environment variables if .env exists
-load_dotenv()
-
 # Base directories
 BASE_DIR = Path(__file__).resolve().parent.parent
 DATA_DIR = BASE_DIR / "data"
@@ -14,8 +11,15 @@ VERSIONS_DIR = IMAGES_DIR / "versions"
 THUMBNAILS_DIR = IMAGES_DIR / "thumbnails"
 METADATA_FILE = DATA_DIR / "metadata.json"
 SAMPLES_DIR = BASE_DIR / "assets" / "samples"
+ENV_FILE = BASE_DIR / ".env"
 
-# Ensure all directories exist
+# Explicitly load environment variables from project root .env
+if ENV_FILE.exists():
+    load_dotenv(dotenv_path=ENV_FILE, override=True)
+else:
+    load_dotenv(override=True)
+
+# Ensure all data directories exist
 for p in [DATA_DIR, IMAGES_DIR, ORIGINALS_DIR, VERSIONS_DIR, THUMBNAILS_DIR, SAMPLES_DIR]:
     p.mkdir(parents=True, exist_ok=True)
 
@@ -42,6 +46,28 @@ OPENAI_EMBEDDING_MODEL = "text-embedding-3-small"
 GEMINI_VISION_MODEL = os.getenv("GEMINI_VISION_MODEL", "gemini-flash-latest").strip()
 GEMINI_PRO_MODEL = "gemini-flash-latest"
 GEMINI_IMAGEN_MODEL = "imagen-3.0-generate-002"
+
+
+def get_config_status() -> dict:
+    """Return platform configuration status without exposing sensitive secrets."""
+    has_openai = bool(OPENAI_API_KEY)
+    has_azure = bool(AZURE_OPENAI_API_KEY and AZURE_OPENAI_ENDPOINT)
+    has_gemini = bool(GEMINI_API_KEY)
+    return {
+        "env_file_exists": ENV_FILE.exists(),
+        "has_openai": has_openai,
+        "has_azure": has_azure,
+        "has_gemini": has_gemini,
+        "cloud_keys_available": has_openai or has_gemini or has_azure,
+        "active_models": {
+            "openai_vision": OPENAI_VISION_MODEL,
+            "openai_fast_vision": OPENAI_FAST_VISION_MODEL,
+            "openai_image": OPENAI_IMAGE_MODEL,
+            "gemini_vision": GEMINI_VISION_MODEL,
+            "azure_model": AZURE_OPENAI_MODEL,
+        }
+    }
+
 
 # Curated Preset Edits
 PRESET_EDITS = {

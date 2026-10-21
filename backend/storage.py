@@ -250,7 +250,7 @@ class StorageManager:
             for path_key in ["image_path", "thumbnail_path"]:
                 rel = ver.get(path_key)
                 if rel:
-                    file_path = BASE_DIR / rel
+                    file_path = BASE_DIR / Path(rel)
                     if file_path.exists():
                         try:
                             file_path.unlink()
@@ -262,7 +262,7 @@ class StorageManager:
 
     def get_version_image_path(self, version_record: Dict[str, Any]) -> Path:
         """Resolve full filesystem Path from relative version path."""
-        return BASE_DIR / version_record["image_path"]
+        return BASE_DIR / Path(version_record["image_path"])
 
     def get_active_version(self, image_record: Dict[str, Any]) -> Dict[str, Any]:
         """Get the version record corresponding to current_version_id."""

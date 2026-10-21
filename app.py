@@ -96,6 +96,7 @@ with st.sidebar:
     )
     if user_openai_key != st.session_state.openai_api_key:
         st.session_state.openai_api_key = user_openai_key
+        os.environ["OPENAI_API_KEY"] = user_openai_key
 
     with st.expander("🌐 Custom API Endpoint / Azure Base URL", expanded=is_azure):
         user_endpoint = st.text_input(
@@ -115,6 +116,7 @@ with st.sidebar:
     )
     if user_gemini_key != st.session_state.gemini_api_key:
         st.session_state.gemini_api_key = user_gemini_key
+        os.environ["GEMINI_API_KEY"] = user_gemini_key
 
     # Active Provider Selector
     available_engines = []
@@ -145,7 +147,7 @@ with st.sidebar:
     else:
         st.session_state.engine_mode = "local"
 
-    # Status Pill
+    # Status Pill & Guidance
     if st.session_state.engine_mode == "openai":
         if is_azure:
             st.success("🟢 Azure GPT-4.1-mini Connected")
@@ -154,7 +156,9 @@ with st.sidebar:
     elif st.session_state.engine_mode == "gemini":
         st.success("🟢 Google Gemini Connected")
     else:
-        st.info("⚡ Local Neural Engine Active (Offline Ready)")
+        st.info("⚡ Smart Local Engine Active (Zero Cost & Offline)")
+        if not (st.session_state.openai_api_key or st.session_state.gemini_api_key):
+            st.caption("💡 *Enter API keys above or set them in `.env` to unlock Cloud GenAI engines.*")
 
     st.markdown("---")
     st.subheader("📊 Library Statistics")
@@ -274,30 +278,38 @@ with nav_tabs[0]:
         if uploaded_file is not None:
             if st.button("🚀 Process & Add to Library", use_container_width=True):
                 with st.spinner("Processing image and running AI visual analysis..."):
-                    pil_img = Image.open(uploaded_file)
-                    caption_data = {}
-                    if auto_caption:
-                        caption_data = analyze_image(
-                            pil_img,
-                            provider=st.session_state.engine_mode,
-                            openai_key=st.session_state.openai_api_key,
-                            gemini_key=st.session_state.gemini_api_key,
-                            filename=uploaded_file.name,
-                            base_url=st.session_state.get("openai_api_base")
-                        )
+                    try:
+                        pil_img = Image.open(uploaded_file)
+                        caption_data = {}
+                        if auto_caption:
+                            try:
+                                caption_data = analyze_image(
+                                    pil_img,
+                                    provider=st.session_state.engine_mode,
+                                    openai_key=st.session_state.openai_api_key,
+                                    gemini_key=st.session_state.gemini_api_key,
+                                    filename=uploaded_file.name,
+                                    base_url=st.session_state.get("openai_api_base")
+                                )
+                            except Exception as e:
+                                st.warning(f"AI Vision notice: {e}. Fallback local heuristic analysis applied.")
+                                from backend.vision_captioner import analyze_locally
+                                caption_data = analyze_locally(pil_img, uploaded_file.name)
 
-                    new_record = storage.add_original_image(
-                        pil_image=pil_img,
-                        filename=uploaded_file.name,
-                        title=custom_title or caption_data.get("title"),
-                        caption=caption_data.get("caption"),
-                        tags=caption_data.get("tags"),
-                        objects=caption_data.get("objects"),
-                        dominant_colors=caption_data.get("dominant_colors")
-                    )
-                    st.success(f"Added '{new_record['title']}' to your library!")
-                    st.session_state.selected_image_id = new_record["id"]
-                    st.rerun()
+                        new_record = storage.add_original_image(
+                            pil_image=pil_img,
+                            filename=uploaded_file.name,
+                            title=custom_title or caption_data.get("title"),
+                            caption=caption_data.get("caption"),
+                            tags=caption_data.get("tags"),
+                            objects=caption_data.get("objects"),
+                            dominant_colors=caption_data.get("dominant_colors")
+                        )
+                        st.success(f"Added '{new_record['title']}' to your library!")
+                        st.session_state.selected_image_id = new_record["id"]
+                        st.rerun()
+                    except Exception as err:
+                        st.error(f"Failed to process image: {err}")
 
     st.markdown("---")
 
@@ -500,25 +512,28 @@ with nav_tabs[1]:
                             help=p_info['description']
                         ):
                             with st.spinner(f"Applying '{p_info['label']}'..."):
-                                with Image.open(active_img_path) as current_pil:
-                                    edited_pil, eng_prompt, model_name = edit_engine.apply_preset(
-                                        current_pil,
-                                        p_key,
-                                        engine_mode=st.session_state.engine_mode,
-                                        openai_key=st.session_state.openai_api_key,
-                                        gemini_key=st.session_state.gemini_api_key
-                                    )
-                                    storage.add_version(
-                                        image_id=active_img_record["id"],
-                                        edited_image=edited_pil,
-                                        prompt=p_info["label"],
-                                        edit_type="preset",
-                                        model_used=model_name,
-                                        notes=f"Preset {p_info['label']}: {eng_prompt[:80]}"
-                                    )
-                                    st.session_state.last_engineered_prompt = eng_prompt
-                                    st.success(f"Generated new version with {p_info['label']}!")
-                                    st.rerun()
+                                try:
+                                    with Image.open(active_img_path) as current_pil:
+                                        edited_pil, eng_prompt, model_name = edit_engine.apply_preset(
+                                            current_pil,
+                                            p_key,
+                                            engine_mode=st.session_state.engine_mode,
+                                            openai_key=st.session_state.openai_api_key,
+                                            gemini_key=st.session_state.gemini_api_key
+                                        )
+                                        storage.add_version(
+                                            image_id=active_img_record["id"],
+                                            edited_image=edited_pil,
+                                            prompt=p_info["label"],
+                                            edit_type="preset",
+                                            model_used=model_name,
+                                            notes=f"Preset {p_info['label']}: {eng_prompt[:80]}"
+                                        )
+                                        st.session_state.last_engineered_prompt = eng_prompt
+                                        st.success(f"Generated new version with {p_info['label']}!")
+                                        st.rerun()
+                                except Exception as err:
+                                    st.error(f"Failed to apply preset '{p_info['label']}': {err}")
 
                 st.markdown("---")
 
@@ -553,28 +568,31 @@ with nav_tabs[1]:
                         st.error("Please enter a natural language instruction.")
                     else:
                         with st.spinner("Step 1/2: Synthesizing photorealistic prompt engineering specification..."):
-                            with Image.open(active_img_path) as current_pil:
-                                edit_result = edit_engine.apply_custom_instruction(
-                                    image=current_pil,
-                                    instruction=user_instruction,
-                                    image_caption=active_img_record.get("caption", ""),
-                                    objects_list=active_img_record.get("objects", []),
-                                    engine_mode=st.session_state.engine_mode,
-                                    openai_key=st.session_state.openai_api_key,
-                                    gemini_key=st.session_state.gemini_api_key
-                                )
-                                
-                                storage.add_version(
-                                    image_id=active_img_record["id"],
-                                    edited_image=edit_result["edited_image"],
-                                    prompt=user_instruction,
-                                    edit_type="custom_prompt",
-                                    model_used=edit_result["model_used"],
-                                    notes=f"Category: {edit_result['edit_category']}"
-                                )
-                                st.session_state.last_engineered_prompt = edit_result["engineered_prompt"]
-                                st.success("Edit successfully applied and registered as a new version!")
-                                st.rerun()
+                            try:
+                                with Image.open(active_img_path) as current_pil:
+                                    edit_result = edit_engine.apply_custom_instruction(
+                                        image=current_pil,
+                                        instruction=user_instruction,
+                                        image_caption=active_img_record.get("caption", ""),
+                                        objects_list=active_img_record.get("objects", []),
+                                        engine_mode=st.session_state.engine_mode,
+                                        openai_key=st.session_state.openai_api_key,
+                                        gemini_key=st.session_state.gemini_api_key
+                                    )
+                                    
+                                    storage.add_version(
+                                        image_id=active_img_record["id"],
+                                        edited_image=edit_result["edited_image"],
+                                        prompt=user_instruction,
+                                        edit_type="custom_prompt",
+                                        model_used=edit_result["model_used"],
+                                        notes=f"Category: {edit_result['edit_category']}"
+                                    )
+                                    st.session_state.last_engineered_prompt = edit_result["engineered_prompt"]
+                                    st.success("Edit successfully applied and registered as a new version!")
+                                    st.rerun()
+                            except Exception as err:
+                                st.error(f"Failed to apply custom edit: {err}")
 
                 # Prompt Engineering Live Preview Box
                 if st.session_state.last_engineered_prompt:

@@ -1,8 +1,26 @@
+# ==============================================================================
+# Lumina AI Studio - Core Requirements
+# Compatible with Python 3.10, 3.11, and 3.12+ on Windows, macOS, and Linux
+# ==============================================================================
+
+# Web Application Framework
 streamlit>=1.35.0
+
+# Image Processing & Manipulation
 pillow>=10.2.0
+
+# HTTP & API Requests
 requests>=2.31.0
+
+# Numerical Processing & Local Vision Filters
 numpy>=1.26.0
+
+# Semantic & Vector Search (TF-IDF & Cosine Similarity)
 scikit-learn>=1.4.0
+
+# Environment Variable Management
 python-dotenv>=1.0.0
+
+# AI Provider Client SDKs (Preserved compatible versions)
 openai>=1.20.0
 google-genai>=0.1.0

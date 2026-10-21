@@ -64,7 +64,10 @@ def analyze_with_openai(
     """Call OpenAI / Azure OpenAI GPT-4.1-mini Vision API to analyze image."""
     key = api_key or os.getenv("OPENAI_API_KEY") or OPENAI_API_KEY
     if not key:
-        raise ValueError("OpenAI / Azure API Key is required for Vision analysis.")
+        raise ValueError(
+            "OpenAI API Key is required for Cloud Vision analysis. "
+            "Please configure OPENAI_API_KEY or AZURE_OPENAI_API_KEY in .env or the Streamlit sidebar."
+        )
 
     b64_img = _image_to_base64_jpeg(image)
 
@@ -106,8 +109,19 @@ def analyze_with_openai(
         "temperature": 0.2
     }
 
-    resp = requests.post(endpoint_url, headers=headers, json=payload, timeout=45)
-    resp.raise_for_status()
+    try:
+        resp = requests.post(endpoint_url, headers=headers, json=payload, timeout=45)
+        resp.raise_for_status()
+    except requests.exceptions.HTTPError as e:
+        code = resp.status_code if resp is not None else "unknown"
+        if code == 401:
+            raise RuntimeError("OpenAI authentication failed (401 Unauthorized). Please check your API key in .env or the sidebar.") from e
+        elif code == 429:
+            raise RuntimeError("OpenAI quota or rate limit exceeded (429). Please verify account billing and limits.") from e
+        raise RuntimeError(f"OpenAI Vision API request failed ({code}): {e}") from e
+    except requests.exceptions.RequestException as e:
+        raise RuntimeError(f"Failed to connect to OpenAI endpoint: {e}") from e
+
     data = resp.json()
     content = data["choices"][0]["message"]["content"]
     return _clean_json_response(content)
@@ -121,7 +135,10 @@ def analyze_with_gemini(
     """Call Google Gemini REST API with image inline data."""
     key = api_key or os.getenv("GEMINI_API_KEY") or GEMINI_API_KEY
     if not key:
-        raise ValueError("Gemini API Key is required for Gemini Vision analysis.")
+        raise ValueError(
+            "Gemini API Key is required for Gemini Vision analysis. "
+            "Please configure GEMINI_API_KEY in .env or the Streamlit sidebar."
+        )
 
     b64_img = _image_to_base64_jpeg(image)
 
@@ -151,8 +168,19 @@ def analyze_with_gemini(
         }
     }
 
-    resp = requests.post(url, headers=headers, json=payload, timeout=45)
-    resp.raise_for_status()
+    try:
+        resp = requests.post(url, headers=headers, json=payload, timeout=45)
+        resp.raise_for_status()
+    except requests.exceptions.HTTPError as e:
+        code = resp.status_code if resp is not None else "unknown"
+        if code in (401, 403):
+            raise RuntimeError("Gemini API authentication failed (401/403). Please check your GEMINI_API_KEY in .env or the sidebar.") from e
+        elif code == 429:
+            raise RuntimeError("Gemini API rate limit or quota exceeded (429).") from e
+        raise RuntimeError(f"Gemini API request failed ({code}): {e}") from e
+    except requests.exceptions.RequestException as e:
+        raise RuntimeError(f"Failed to connect to Google Gemini endpoint: {e}") from e
+
     data = resp.json()
     candidates = data.get("candidates", [])
     if not candidates:
